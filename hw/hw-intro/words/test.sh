@@ -1,0 +1,1 @@
+cat words.txt | tr " " "\n" | tr -s "\n" | tr "[:upper:]" "[:lower:]" | tr -d -C "[:lower:]\n" | sort | uniq -c | sort -n

@@ -1,0 +1,255 @@
+========================================
+     2.1 Find the Faulting Instruction
+========================================
+
+Based on the contents of the do-nothing.result file, please answer the following questions on Gradescope:
+
+1. What virtual address did the program try to access from userspace that caused it to crash?
+ANS: 0xc0000008
+This is shown in the line: cr2=c0000008 - the CR2 register contains the virtual address that caused the page fault.
+
+
+2. What is the virtual address of the instruction that resulted in the crash?
+ANS: 0x804897f
+This is shown in the line: Interrupt 0x0e (#PF Page-Fault Exception) at eip=0x804897f
+
+
+3. To investigate, disassemble the do-nothing binary using objdump (you used this tool in Homework
+0). What is the name of the function the program was in when it crashed? Copy the disassembled
+code for that function onto Gradescope, and identify the instruction at which the program crashed.
+ANS: To disassemble the do-nothing binary, run(in ./src/userprog directory)
+    objdump -d build/tests/userprog/do-nothing
+Looking for the function containing address 0x804897f:
+    804897f:       8b 45 0c                mov    0xc(%ebp),%eax
+Function name: _start
+
+
+4. Find the C code for the function you identified above (hint: it was executed in userspace, so it’s
+either in do-nothing.c or one of the files in proj0/src/lib or proj0/src/lib/user), and copy it
+onto Gradescope. For each instruction in the disassembled function in #3, explain in a few words
+why it’s necessary and/or what it’s trying to do. Hint: see 80x86 Calling Convention.
+ANS: in proj0/src/lib/user/entry.c
+void _start(int argc, char* argv[]) { exit(main(argc, argv)); }
+
+here is an explanation based on the 80x86 calling convention:
+    endbr32: This instruction is for control-flow enforcement (security feature) and ensures valid branch targets. It does not affect program logic.
+
+    push %ebp: Saves the previous base pointer onto the stack to preserve the caller's stack frame.
+
+    mov %esp,%ebp: Sets up the new base pointer for the current stack frame, so ebp now points to the start of the current frame.
+
+    sub $0x18,%esp: Allocates 24 bytes of space on the stack for local variables and function arguments. This is typical for aligning the stack and preparing for function calls.
+
+    mov 0xc(%ebp),%eax: Crashing instruction - Loads the value at offset 0xc from ebp into eax. According to the calling convention, when _start is called, the arguments argc and argv are on the stack.
+        Here, ebp+0x8 should contain argc, and ebp+0xc should contain argv. This instruction is trying to load argv into eax.
+
+    mov %eax,0x4(%esp): Stores the value in eax (which is argv) at offset 0x4 from esp, preparing it as the second argument for the main function call.
+
+    mov 0x8(%ebp),%eax: Loads the value at offset 0x8 from ebp into eax, which should be argc.
+
+    mov %eax,(%esp): Stores the value in eax (which is argc) at the top of the stack, preparing it as the first argument for the main function call.
+
+    call 80480d4 <main>: Calls the main function with the arguments argc and argv.
+
+    mov %eax,(%esp): Stores the return value from main (in eax) onto the stack, preparing it as the argument for the exit function call.
+
+    call 804ac0b <exit>: Calls the exit function with the return value from main, which terminates the program.
+
+
+5. Why did the instruction you identified in #3 try to access memory at the virtual address you
+identified in #1? Don’t explain this in terms of the values of registers; we’re looking for a higher
+level explanation
+ANS:The instruction tried to access memory at 0xc0000008 because the kernel did not properly set up the user program's stack before transferring control to it.
+    In a properly functioning system, when a user program starts:
+        The kernel allocates a valid stack for the user process
+        The kernel pushes command-line arguments and environment variables onto the stack
+        The kernel sets the stack pointer (ESP) to point to this valid memory region
+
+    In this case, the stack pointer (ESP = 0xbfffffe4) was pointing to what should have been valid stack memory,
+    but when the program tried to access command-line argument data at edp+0xc (which would be 0xbffffffc + 0xc = 0xc0000008),
+    it accessed an invalid memory region because the kernel failed to properly map and initialize the user stack.
+    The function was trying to read the argument from the stack, but the stack pointer was pointing to kernel memory.
+    This indicates a fundamental issue with the process creation and memory setup in the Pintos kernel.
+
+
+
+========================================
+     2.2 Step Through the Crash
+========================================
+
+6. Step into the process_execute function. What is the name and address of the thread running
+this function? What other threads are present in Pintos at this time? Copy their struct threads.
+(Hint: for the last part dumplist &all_list thread allelem may be useful.)
+ANS: (gdb) print thread_current() 
+	name and address) main 0xc000e000  
+     (gdb) dumplist &all_list thread allelem 
+	pintos-debug: dumplist #0: 0xc000e000 {tid = 1, status = THREAD_RUNNING, name = "main", '\000' <repeats 11 times>, stack = 0xc000ed9c "=S\002\300\001", priority = 31, allelem = {
+    	    prev = 0xc003b17c <all_list>, next = 0xc0104020}, elem = {prev = 0xc003b16c <fifo_ready_list>, next = 0xc003b174 <fifo_ready_list+8>}, pcb = 0xc010500c, magic = 3446325067}
+	pintos-debug: dumplist #1: 0xc0104000 {tid = 2, status = THREAD_BLOCKED, name = "idle", '\000' <repeats 11 times>, stack = 0xc0104f14 "", priority = 0, allelem = {prev = 0xc000e020,
+            next = 0xc003b184 <all_list+8>}, elem = {prev = 0xc003b16c <fifo_ready_list>, next = 0xc003b174 <fifo_ready_list+8>}, pcb = 0x0, magic = 3446325067}
+
+
+7. What is the backtrace for the current thread? Copy the backtrace from GDB as your answer and
+also copy down the line of C code corresponding to each function call.
+ANS: (gdb) backtrace
+	#0  process_execute (file_name=0xc0007d50 "do-nothing") at ../../userprog/process.c:57
+	#1  0xc0020a62 in run_task (argv=0xc003b06c <argv+12>) at ../../threads/init.c:315
+	#2  0xc0020ba4 in run_actions (argv=0xc003b06c <argv+12>) at ../../threads/init.c:388
+	#3  0xc0020421 in main () at ../../threads/init.c:136
+ 
+(gdb) frame 0
+(gdb) list    
+	process.c:57: sema_init(&temporary, 0); -- Inside process_execute function
+(gdb) frame 1
+(gdb) list
+	init.c:315: process_wait(process_execute(task)); 
+(gdb) frame 2
+(gdb) list
+	init.c:388: a->function(argv);
+(gdb) frame 3
+(gdb) list
+	init.c:136: run_actions(argv);
+
+
+8. Set a breakpoint at start_process and continue to that point. What is the name and address of
+the thread running this function? What other threads are present in Pintos at this time? Copy
+their struct threads.
+ANS: (gdb) print thread_current() 
+	do-nothing\000\000\000\000\000 0xc010b000
+     (gdb) dumplist &all_list thread allelem 
+	pintos-debug: dumplist #0: 0xc000e000 {tid = 1, status = THREAD_BLOCKED, name = "main", '\000' <repeats 11 times>, stack = 0xc000ee7c "", priority = 31, allelem = {prev = 0xc003b17c <all_list>,
+    	    next = 0xc0104020}, elem = {prev = 0xc003cb98 <temporary+4>, next = 0xc003cba0 <temporary+12>}, pcb = 0xc010500c, magic = 3446325067}
+	pintos-debug: dumplist #1: 0xc0104000 {tid = 2, status = THREAD_BLOCKED, name = "idle", '\000' <repeats 11 times>, stack = 0xc0104f14 "", priority = 0, allelem = {prev = 0xc000e020, next = 0xc010b020},
+            elem = {prev = 0xc003b16c <fifo_ready_list>, next = 0xc003b174 <fifo_ready_list+8>}, pcb = 0x0, magic = 3446325067}
+	pintos-debug: dumplist #2: 0xc010b000 {tid = 3, status = THREAD_RUNNING, name = "do-nothing\000\000\000\000\000", stack = 0xc010bfd4 "", priority = 31, allelem = {prev = 0xc0104020,
+            next = 0xc003b184 <all_list+8>}, elem = {prev = 0xc003b16c <fifo_ready_list>, next = 0xc003b174 <fifo_ready_list+8>}, pcb = 0x0, magic = 3446325067}
+ 
+
+9. Where is the thread running start_process created? Copy down this line of code.
+
+ANS: function(aux); /* Execute the thread function. */   
+	at ../../threads/thread.c:398
+
+
+10. Step through the start_process() function until you have stepped over the call to load(). Note
+that load() sets the eip and esp fields in the if_ structure. Print out the value of the if_
+structure, displaying the values in hex (hint: print/x if_).
+ANS: (gdb) print/x if_
+	$1 = {edi = 0x0, esi = 0x0, ebp = 0x0, esp_dummy = 0x0, ebx = 0x0, edx = 0x0, ecx = 0x0, eax = 0x0, gs = 0x23, fs = 0x23, es = 0x23, ds = 0x23, vec_no = 0x0, error_code = 0x0, frame_pointer = 0x0,
+  eip = 0x804890f, cs = 0x1b, eflags = 0x202, esp = 0xc0000000, ss = 0x23}
+
+
+11. The first instruction in the asm volatile statement sets the stack pointer to the bottom of the
+if_ structure. The second one jumps to intr_exit. The comments in the code explain what’s
+happening here. Step into the asm volatile statement, and then step through the instructions.
+As you step through the iret instruction, observe that the function “returns” into userspace. Why
+does the processor switch modes when executing this function? Feel free to explain this in terms
+of the values in memory and/or registers at the time iret is executed, and the functionality of the
+iret instruction.
+ANS: The processor switches modes when executing iret because:
+
+	iret pops CS (code segment), EIP (instruction pointer), EFLAGS, SS (stack segment), and ESP (stack pointer) from the stack
+
+	The CS value (0x1b) has privilege level 3 (user mode) in its lower bits
+
+	The SS value (0x23) also indicates user mode privilege level
+
+When these segment registers with user privilege level are loaded, the CPU automatically switches from kernel mode (ring 0) to user mode (ring 3)
+
+
+12. Once you’ve executed iret, type info registers to print out the contents of registers. Include
+the output of this command on Gradescope. How do these values compare to those when you
+printed out if_?
+ANS: (gdb) info registers
+
+eax            0x0                 0
+ecx            0x0                 0
+edx            0x0                 0
+ebx            0x0                 0
+esp            0xc0000000          0xc0000000
+ebp            0x0                 0x0
+esi            0x0                 0
+edi            0x0                 0
+eip            0x804890f           0x804890f
+eflags         0x202               [ IOPL=0 IF ]
+cs             0x1b                27
+ss             0x23                35
+ds             0x23                35
+es             0x23                35
+fs             0x23                35
+gs             0x23                35
+fs_base        0x0                 0
+gs_base        0x0                 0
+k_gs_base      0x0                 0
+cr0            0x80010015          [ PG WP ET EM PE ]
+cr2            0x0                 0
+cr3            0x10c000            [ PDBR=268 PCID=0 ]
+cr4            0x0                 [ ]
+cr8            0x0                 0
+efer           0x0                 [ ]
+xmm0           {v4_float = {0x0, 0x0, 0x0, 0x0}, v2_double = {0x0, 0x0}, v16_int8 = {0x0 <repeats 16 times>}, v8_int16 = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}, v4_int32 = {0x0, 0x0, 0x0, 0x0}, v2_int64 =
+{0x0, 0x0}, uint128 = 0x0}
+xmm1           {v4_float = {0x0, 0x0, 0x0, 0x0}, v2_double = {0x0, 0x0}, v16_int8 = {0x0 <repeats 16 times>}, v8_int16 = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}, v4_int32 = {0x0, 0x0, 0x0, 0x0}, v2_int64 =
+{0x0, 0x0}, uint128 = 0x0}
+
+These match the values in the if_ structure exactly.
+
+
+13. Notice that if you try to get your current location with backtrace you’ll only get a hex address.
+This is because pintos-gdb ./kernel.o only loads in the symbols from the kernel. Now
+that we are in userspace, we have to load in the symbols from the Pintos executable we are running,
+namely do-nothing. To do this, use loadusersymbols tests/userprog/do-nothing. Now, using
+backtrace, you’ll see that you’re currently in the _start function. Using the disassemble and
+stepi commands, step through userspace instruction by instruction until the page fault occurs.
+At this point, the processor has immediately entered kernel mode to handle the page fault, so
+backtrace will show the current stack in kernel mode, not the user stack at the time of the page
+fault. However, you can use btpagefault to find the user stack at the time of the page fault.
+Copy down the output of btpagefault
+ANS:
+#0  _start (argc=-268370093, argv=0xf000e2c3) at ../../lib/user/entry.c:6
+#1  0xf000ff53 in ?? ()
+
+
+
+========================================
+2.3 Debug
+========================================
+
+14. Modify the Pintos kernel so that do-nothing no longer crashes. Your change should be in the
+Pintos kernel, not the userspace program (do-nothing.c) or libraries in proj0/src/lib. This
+should not involve extensive changes to the Pintos source code. Our staff solution solves this
+with a single-line change to process.c. Explain the change you made to Pintos and why it was
+necessary. After making this change, the do-nothing test should pass but all others will still fail.
+ANS: change setup_stack function in process.c  
+	*esp = PHYS_BASE - 20;
+     Why necessary:
+     	Move the stack pointer from the kernel boundary 0xc0000000 back to the user stack page 0xbfffffec
+	Enough space is reserved for the stack frame of _start function
+	Ensure that subsequent mov 0xc (%ebp),%eax instructions access valid user space addresses
+
+
+15. It is possible that your fix also works for the stack-align-0 test, but there are solutions for
+do-nothing that do not. Take a look at the stack-align-0 test. It behaves similarly to
+do-nothing, but it returns the value of esp % 16. Write down what this program should return (hint: this can be found in stack-align-0.ck) as well as why this is the case. 
+You may wish to review stack alignment from Section 02.) Then make sure that your previous fix for do-nothing
+also passes stack-align-0.
+ANS：12, bacuase when the main function entry point is reached, 
+the value of esp is usually 16-byte aligned minus 4 (since the call instruction pushes the return address), so esp% 16 should be 12
+
+
+16. Re-run GDB as before. Execute the loadusersymbols command, set a breakpoint at _start,
+and continue, to skip directly to the beginning of userspace execution. Using the disassemble
+and stepi commands, execute the do-nothing program instruction by instruction until you reach
+the int $0x30 instruction in proj0/src/lib/user/syscall.c. At this point, print the top two
+words at the top of the stack by examining memory (hint: x/2xw $esp) and copy the output.
+ANS: 0xbfffff98: 1 162
+
+
+
+17. The int $0x30 instruction switches to kernel mode and pushes an interrupt stack frame onto the
+kernel stack for this process. Continue stepping through instruction-by-instruction until you reach
+syscall_handler. What are the values of args[0] and args[1], and how do they relate to your
+answer to the previous question?
+ANS: 0xc010bf8c  0xc010bf98
+It is on the top relative to the registers' addresses.
+
