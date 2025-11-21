@@ -144,7 +144,7 @@ ANS:
 
 ANS: 
 * Stack: Dynamically allocated at runtime, is part of the process memory layout (high addresses grow downward)
-* Haap: Also dynamically allocated at runtime through malloc/brk
+* Heap: Also dynamically allocated at runtime through malloc/brk
 10. Based on the output of map, in which direction does the stack grow? Explain.
 
 ANS: Based on the output of the map program, the stack grows downward (from high address to low address)
