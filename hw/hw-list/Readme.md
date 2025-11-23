@@ -52,7 +52,7 @@ I write a script `test.sh` to compare the `./pwords` and `./words` speed and out
 
 1. Briefly compare the performance of lwords and pwords when run on the Gutenberg dataset. How might you explain the performance differences?
 
-ANS: pwords (parallel version) typically performs better than lwords (sequential version) on the Gutenberg dataset (the parallel version completes the work ~4x faster than sequential version.), with the degree of improvement depending on:
+ANS: pwords (parallel version) typically performs better than lwords (sequential version) on the Gutenberg dataset (the parallel version completes the work ~4x faster than sequential version), with the degree of improvement depending on:
 
 * **Number of CPU cores**: More cores allow better parallelization
 
