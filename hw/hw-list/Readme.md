@@ -48,26 +48,21 @@ No, **not all threads may run before the program exits**, because:
 
 
 ## Additional Questions
-I write a script `test.sh` to compare the `./pwords` and `./words` speed and output content. To use it, just run `./test.sh`.   
+I write a script `test.sh` to compare the `./pwords` and `./lwords` speed and output content. To use it, just run `./test.sh`.   
 
 1. Briefly compare the performance of lwords and pwords when run on the Gutenberg dataset. How might you explain the performance differences?
 
-ANS: pwords (parallel version) typically performs better than lwords (sequential version) on the Gutenberg dataset (the parallel version completes the work ~4x faster than sequential version), with the degree of improvement depending on:
+ANS: pwords (parallel version) is no betten than lwords (sequential version) on the Gutenberg dataset (the sequential version completes the work ~1.06x faster than parallel version), with the possible reason given follows:
 
-* **Number of CPU cores**: More cores allow better parallelization
-
-* **File characteristics**: Many small files vs few large files affect parallelization efficiency
-
-* **I/O subsystem**: SSD vs HDD affects how well parallel I/O can be utilized
-
-The performance differences can be explained by:
-
-* **Parallel file processing**: pwords processes multiple files simultaneously using threads
-
-* **CPU core utilization**: On multi-core systems, parallel execution better utilizes available compute resources
-
-* **I/O overlap**: While one thread waits for I/O, others can process data already in memory
-
+* Bottleneck Analysis:
+    * In the implementation of pwords (`word_count_p.c`), a global mutex lock (`wclist->lock`) is used to protect the entire linked list.
+    * Whenever any thread wants to add or look up a word, it must acquire this lock.
+* Serialization of Execution:
+    * The lookup operation in the linked list is $O(N)$ (linear time). As the number of words increases, traversing the list becomes increasingly slow. Since this part of the code is protected by a lock (critical section), only one thread can execute add_word at any given time. This means that even though multiple threads are created, they are actually waiting in line to enter the critical section. As a result, the program essentially degenerates into serial execution.
+* Additional Overhead:
+    * Not only does pwords fail to take advantage of parallelism, it also incurs extra overhead:
+        * Thread creation and switching overhead: The operating system needs resources to manage threads.
+        * Lock overhead: Acquiring and releasing locks, as well as threads being blocked and woken up for the lock, all take time.
 
 2. Under what circumstances would pwords perform better than lwords? Under what circumstances would lwords perform better than pwords? Is it possible to use multiple threads in a way that
 always performs better than lwords?

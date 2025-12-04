@@ -27,7 +27,7 @@ cleanup() {
 # Register cleanup function
 trap cleanup EXIT
 
-echo -e "${BLUE}Starting comparison of ./pwords and ./words performance and output...${NC}"
+echo -e "${BLUE}Starting comparison of ./pwords and ./lwords performance and output...${NC}"
 echo "=============================================="
 
 # Check if files exist
@@ -58,18 +58,18 @@ if [ $PWORDS_EXIT_CODE -ne 0 ]; then
     echo -e "${RED}./pwords execution failed, exit code: $PWORDS_EXIT_CODE${NC}"
 fi
 
-# Test ./words
-echo -e "${YELLOW}Testing ./words...${NC}"
+# Test ./lwords
+echo -e "${YELLOW}Testing ./lwords...${NC}"
 if [ ! -f "./words" ]; then
-    echo -e "${RED}Error: ./words does not exist${NC}"
+    echo -e "${RED}Error: ./lwords does not exist${NC}"
     exit 1
 fi
 
-{ time ./words "${FILES[@]}" > "$TMP_WORDS" 2>&1 ; } 2> "$TIME_WORDS"
+{ time ./lwords "${FILES[@]}" > "$TMP_WORDS" 2>&1 ; } 2> "$TIME_WORDS"
 
 WORDS_EXIT_CODE=$?
 if [ $WORDS_EXIT_CODE -ne 0 ]; then
-    echo -e "${RED}./words execution failed, exit code: $WORDS_EXIT_CODE${NC}"
+    echo -e "${RED}./lwords execution failed, exit code: $WORDS_EXIT_CODE${NC}"
 fi
 
 echo "=============================================="
@@ -78,7 +78,7 @@ echo "=============================================="
 echo -e "${BLUE}Time comparison:${NC}"
 echo -e "${YELLOW}./pwords execution time:${NC}"
 cat "$TIME_PWORDS"
-echo -e "${YELLOW}./words execution time:${NC}"
+echo -e "${YELLOW}./lwords execution time:${NC}"
 cat "$TIME_WORDS"
 
 echo "=============================================="
@@ -87,7 +87,7 @@ echo "=============================================="
 echo -e "${BLUE}Output content comparison:${NC}"
 
 # Use diff to compare content
-if diff -q -w "$TMP_PWORDS" "$TMP_WORDS" > /dev/null; then
+if diff -q "$TMP_PWORDS" "$TMP_WORDS" > /dev/null; then
     echo -e "${GREEN}✓ Output content is identical${NC}"
 else
     echo -e "${RED}✗ Output content differs${NC}"
@@ -116,9 +116,9 @@ if command -v bc >/dev/null 2>&1; then
     if (( $(echo "$words_seconds > 0" | bc -l) )); then
         speed_ratio=$(echo "scale=2; $pwords_seconds / $words_seconds" | bc)
         if (( $(echo "$speed_ratio < 1" | bc -l) )); then
-            echo -e "./pwords is ${GREEN}$(echo "scale=2; 1/$speed_ratio" | bc)x faster${NC} than ./words"
+            echo -e "./pwords is ${GREEN}$(echo "scale=2; 1/$speed_ratio" | bc)x faster${NC} than ./lwords"
         else
-            echo -e "./words is ${GREEN}$(echo "scale=2; $speed_ratio" | bc)x faster${NC} than ./pwords"
+            echo -e "./lwords is ${GREEN}$(echo "scale=2; $speed_ratio" | bc)x faster${NC} than ./pwords"
         fi
     fi
 else
