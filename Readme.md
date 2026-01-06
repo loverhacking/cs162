@@ -42,7 +42,7 @@ including process management, memory management, file systems, and concurrency.
   * DMA
   * Disk Performance: Seek time, Rotational latency, Transfer time
 
-File System
+* File System
   * Queuing Latency and Queuing Theory
   * Inode and Naming 
   * File allocation table (FAT) Scheme
